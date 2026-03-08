@@ -1,0 +1,11 @@
+-- 1. Create a new user with a password
+CREATE USER workflow_user WITH PASSWORD 'workflow_pass';
+
+-- 2. Create the database and make the new user the owner
+CREATE DATABASE workflow_db OWNER workflow_user;
+
+-- 3. Grant privileges (Optional, usually covered by ownership, but good for ensuring access)
+GRANT ALL PRIVILEGES ON DATABASE workflow_db TO workflow_user;
+
+-- 4. Exit the psql shell
+\q

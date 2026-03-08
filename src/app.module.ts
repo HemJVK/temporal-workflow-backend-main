@@ -13,6 +13,8 @@ import { AuditModule } from './audit/audit.module';
 import { WorkflowRun } from './workflows/entities/workflow-run.entity';
 import { CommonModule } from './common/common.module';
 import { VoiceModule } from './voice/voice.module';
+import { McpModule } from './mcp/mcp.module';
+import { McpServer } from './mcp/entities/mcp-server.entity';
 
 @Module({
   imports: [
@@ -36,15 +38,16 @@ import { VoiceModule } from './voice/voice.module';
         username: config.get<string>('DB_USERNAME') as string,
         password: config.get<string>('DB_PASSWORD') as string,
         database: config.get<string>('DB_NAME') as string,
-        entities: [WorkflowDefinition, WorkflowRun],
+        entities: [WorkflowDefinition, WorkflowRun, McpServer],
         synchronize: true,
       }),
     }),
     AuditModule,
     CommonModule,
     VoiceModule,
+    McpModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }
