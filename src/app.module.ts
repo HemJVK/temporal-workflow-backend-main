@@ -15,6 +15,9 @@ import { CommonModule } from './common/common.module';
 import { VoiceModule } from './voice/voice.module';
 import { McpModule } from './mcp/mcp.module';
 import { McpServer } from './mcp/entities/mcp-server.entity';
+import { UsersModule } from './users/users.module';
+import { AuthModule } from './auth/auth.module';
+import { User } from './users/entities/user.entity';
 
 @Module({
   imports: [
@@ -38,7 +41,7 @@ import { McpServer } from './mcp/entities/mcp-server.entity';
         username: config.get<string>('DB_USERNAME') as string,
         password: config.get<string>('DB_PASSWORD') as string,
         database: config.get<string>('DB_NAME') as string,
-        entities: [WorkflowDefinition, WorkflowRun, McpServer],
+        entities: [WorkflowDefinition, WorkflowRun, McpServer, User],
         synchronize: true,
       }),
     }),
@@ -46,6 +49,8 @@ import { McpServer } from './mcp/entities/mcp-server.entity';
     CommonModule,
     VoiceModule,
     McpModule,
+    UsersModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [AppService],
