@@ -4,9 +4,12 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { User } from '../users/entities/user.entity';
 import { OtpService } from './otp.service';
+import { OAuth2Client } from 'google-auth-library';
 
 @Injectable()
 export class AuthService {
+  private googleClient = new OAuth2Client('93727091909-pc7n4v5sefspk8j3qq38f4fsmo1ki2lk.apps.googleusercontent.com');
+
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
@@ -115,5 +118,54 @@ export class AuthService {
       user = await this.usersService.create({ sso_id, email });
     }
     return this.login(user);
+  }
+
+  async googleLogin(token: string) {
+    try {
+      const ticket = await this.googleClient.verifyIdToken({
+        idToken: token,
+        audience: '93727091909-pc7n4v5sefspk8j3qq38f4fsmo1ki2lk.apps.googleusercontent.com',
+      });
+      const payload = ticket.getPayload();
+      if (!payload || !payload.sub || !payload.email) {
+        throw new BadRequestException('Invalid Google Token structure');
+      }
+      return this.ssoLogin(payload.sub, payload.email);
+    } catch (e) {
+      throw new UnauthorizedException('Invalid Google Token');
+    }
+  }
+
+  async requestPhoneAdd(userId: string, phone_number: string) {
+    const user = await this.usersService.findById(userId);
+    if (!user) throw new BadRequestException('User not found');
+    if (user.phone_number) throw new BadRequestException('Phone already exists');
+
+    const otp = this.otpService.generateOtp();
+    const expiresAt = this.otpService.getExpiry();
+    await this.usersService.update(user.id, { otp_code: otp, otp_expires_at: expiresAt });
+    await this.otpService.sendOtp(phone_number, otp, 'phone');
+    
+    return { message: 'OTP sent to mobile device' };
+  }
+
+  async verifyPhoneAdd(userId: string, phone_number: string, code: string) {
+    const user = await this.usersService.findById(userId);
+    if (!user || user.otp_code !== code || (user.otp_expires_at && user.otp_expires_at < new Date())) {
+       throw new BadRequestException('Invalid or expired OTP');
+    }
+
+    // Since they verified a mobile phone, they are granted 30 credits!
+    const newCredits = user.credits + 30;
+    await this.usersService.update(user.id, {
+       otp_code: null,
+       otp_expires_at: null,
+       phone_number,
+       is_phone_verified: true,
+       credits: newCredits
+    });
+
+    const updatedUser = await this.usersService.findById(user.id) as User;
+    return this.login(updatedUser); // Return a fresh token to reflect any new payload states if needed
   }
 }

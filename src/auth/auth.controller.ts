@@ -40,12 +40,26 @@ export class AuthController {
     return this.authService.verifyOtp(body.userId, body.code);
   }
 
-  @Post('sso')
-  async sso(@Body() body: any) {
-    if (!body.sso_id) {
-       throw new UnauthorizedException('SSO ID required');
+  @Post('google')
+  async google(@Body() body: { token: string }) {
+    if (!body.token) {
+       throw new UnauthorizedException('Google ID token is required');
     }
-    return this.authService.ssoLogin(body.sso_id, body.email);
+    return this.authService.googleLogin(body.token);
+  }
+
+  @UseGuards(AuthGuard)
+  @Post('add-phone')
+  async requestPhoneAdd(@Request() req: any, @Body() body: { phone: string }) {
+     if (!body.phone) throw new UnauthorizedException('Phone number required');
+     return this.authService.requestPhoneAdd(req.user.sub, body.phone);
+  }
+
+  @UseGuards(AuthGuard)
+  @Post('verify-add-phone')
+  async verifyPhoneAdd(@Request() req: any, @Body() body: { phone: string, code: string }) {
+     if (!body.phone || !body.code) throw new UnauthorizedException('Phone and code required');
+     return this.authService.verifyPhoneAdd(req.user.sub, body.phone, body.code);
   }
 
   @UseGuards(AuthGuard)
