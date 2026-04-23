@@ -7,6 +7,26 @@ export const validationSchema = Joi.object({
     .valid('development', 'production', 'test')
     .default('development'),
 
+  // Auth
+  JWT_SECRET: Joi.string().when('NODE_ENV', {
+    is: 'production',
+    then: Joi.string().min(24).required(),
+    otherwise: Joi.string().default('fallback_secret_key_123'),
+  }),
+
+  // AI Providers
+  OPENROUTER_API_KEY: Joi.string().when('NODE_ENV', {
+    is: 'production',
+    then: Joi.required(),
+    otherwise: Joi.optional(),
+  }),
+
+  // Twilio (optional unless you rely on SMS)
+  TWILIO_ACCOUNT_SID: Joi.string().optional(),
+  TWILIO_API_KEY_SID: Joi.string().optional(),
+  TWILIO_API_KEY_SECRET: Joi.string().optional(),
+  TWILIO_PHONE_NUMBER: Joi.string().optional(),
+
   // Database (Fail if these are missing)
   DB_HOST: Joi.string().required(),
   DB_PORT: Joi.number().default(5432),

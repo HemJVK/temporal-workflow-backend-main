@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UnauthorizedException, Get, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Body, UnauthorizedException, Get, UseGuards, Request, BadRequestException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 import { AuthGuard } from './auth.guard';
@@ -62,6 +62,13 @@ export class AuthController {
      return this.authService.verifyPhoneAdd(req.user.sub, body.phone, body.code);
   }
 
+  /** Resend OTP to phone/email after expiry */
+  @Post('resend-otp')
+  async resendOtp(@Body() body: { userId: string }) {
+    if (!body.userId) throw new UnauthorizedException('userId is required');
+    return this.authService.resendOtp(body.userId);
+  }
+
   @UseGuards(AuthGuard)
   @Post('tutorial-seen')
   async markTutorialSeen(@Request() req: any) {
@@ -76,5 +83,12 @@ export class AuthController {
     // omit password
     const { password_hash, ...result } = user;
     return result;
+  }
+
+  @UseGuards(AuthGuard)
+  @Post('bootstrap-admin')
+  async bootstrapAdmin(@Request() req: any, @Body() body: { passkey: string }) {
+    if (!body.passkey) throw new BadRequestException('Passkey is required');
+    return this.authService.bootstrapAdmin(req.user.sub as string, body.passkey);
   }
 }

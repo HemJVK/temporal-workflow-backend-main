@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { WorkflowsModule } from './workflows/workflows.module';
@@ -18,6 +20,11 @@ import { McpServer } from './mcp/entities/mcp-server.entity';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { User } from './users/entities/user.entity';
+import { AgentsModule } from './agents/agents.module';
+import { Agent } from './agents/entities/agent.entity';
+import { WorkflowHelperModule } from './workflow-helper/workflow-helper.module';
+import { CreditsModule } from './credits/credits.module';
+import { CreditTransaction } from './credits/entities/credit-transaction.entity';
 
 @Module({
   imports: [
@@ -28,6 +35,10 @@ import { User } from './users/entities/user.entity';
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       validationSchema: validationSchema,
     }),
+    ThrottlerModule.forRoot([
+      { name: 'short', ttl: 1000, limit: 10 },   // 10 req/sec burst
+      { name: 'medium', ttl: 60000, limit: 100 }, // 100 req/min
+    ]),
     WorkflowsModule,
     WebhooksModule,
     TemporalModule,
@@ -41,7 +52,7 @@ import { User } from './users/entities/user.entity';
         username: config.get<string>('DB_USERNAME') as string,
         password: config.get<string>('DB_PASSWORD') as string,
         database: config.get<string>('DB_NAME') as string,
-        entities: [WorkflowDefinition, WorkflowRun, McpServer, User],
+        entities: [WorkflowDefinition, WorkflowRun, McpServer, User, Agent, CreditTransaction],
         synchronize: true,
       }),
     }),
@@ -51,8 +62,14 @@ import { User } from './users/entities/user.entity';
     McpModule,
     UsersModule,
     AuthModule,
+    AgentsModule,
+    WorkflowHelperModule,
+    CreditsModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+  ],
 })
 export class AppModule { }

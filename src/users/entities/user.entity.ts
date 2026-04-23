@@ -1,4 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
+import { CreditTransaction } from '../../credits/entities/credit-transaction.entity';
 
 @Entity('users')
 export class User {
@@ -21,6 +22,9 @@ export class User {
   credits: number;
 
   @Column({ default: false })
+  is_admin: boolean;
+
+  @Column({ default: false })
   is_email_verified: boolean;
 
   @Column({ default: false })
@@ -40,4 +44,7 @@ export class User {
 
   @UpdateDateColumn()
   updated_at: Date;
+
+  @OneToMany(() => CreditTransaction, (tx) => tx.user)
+  credit_transactions: CreditTransaction[];
 }

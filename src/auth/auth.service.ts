@@ -1,19 +1,23 @@
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { User } from '../users/entities/user.entity';
 import { OtpService } from './otp.service';
 import { OAuth2Client } from 'google-auth-library';
+import { CreditsService } from '../credits/credits.service';
 
 @Injectable()
 export class AuthService {
   private googleClient = new OAuth2Client('93727091909-pc7n4v5sefspk8j3qq38f4fsmo1ki2lk.apps.googleusercontent.com');
+  private readonly STARTER_CREDITS = 50;
 
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
     private otpService: OtpService,
+    @Inject(forwardRef(() => CreditsService))
+    private creditsService: CreditsService,
   ) {}
 
   async validateUser(email: string, pass: string): Promise<User | null> {
@@ -27,16 +31,28 @@ export class AuthService {
     return null;
   }
 
+  private async checkAdminPromotion(user: User): Promise<User> {
+    const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase());
+    if (user.email && adminEmails.includes(user.email.toLowerCase()) && !user.is_admin) {
+      console.log(`Auto-promoting ${user.email} to Admin based on ADMIN_EMAILS config.`);
+      await this.usersService.update(user.id, { is_admin: true });
+      return (await this.usersService.findById(user.id)) || user;
+    }
+    return user;
+  }
+
   async login(user: User) {
-    const payload = { email: user.email, sub: user.id };
+    const promotedUser = await this.checkAdminPromotion(user);
+    const payload = { email: promotedUser.email, sub: promotedUser.id, is_admin: promotedUser.is_admin };
     return {
       access_token: this.jwtService.sign(payload),
       user: {
-        id: user.id,
-        email: user.email,
-        phone_number: user.phone_number,
-        credits: user.credits,
-        sso_id: user.sso_id
+        id: promotedUser.id,
+        email: promotedUser.email,
+        phone_number: promotedUser.phone_number,
+        credits: promotedUser.credits,
+        sso_id: promotedUser.sso_id,
+        is_admin: promotedUser.is_admin
       }
     };
   }
@@ -61,6 +77,9 @@ export class AuthService {
       userData.password_hash = await bcrypt.hash(data.password, 10);
     }
 
+    // Give new users starter credits so the app is usable immediately.
+    // (We still grant an additional bonus for phone verification later.)
+    userData.credits = this.STARTER_CREDITS;
     const newUser = await this.usersService.create(userData);
     
     // Generate and "send" OTP
@@ -87,23 +106,45 @@ export class AuthService {
        throw new BadRequestException('OTP expired');
     }
 
-    // Mark as verified and assign credits if phone was provided
-    let credits = user.credits;
+    // Mark as verified
     const isPhone = !!user.phone_number;
-    if (isPhone && !user.is_phone_verified) {
-       credits = 30; // Grant 30 credits for first-time phone verification
-    }
 
     await this.usersService.update(user.id, {
        otp_code: null,
        otp_expires_at: null,
        is_phone_verified: isPhone ? true : user.is_phone_verified,
        is_email_verified: !isPhone && user.email ? true : user.is_email_verified,
-       credits
     });
+    
+    // Bonus credits for phone verification (anti-spam + higher trust)
+    if (isPhone && !user.is_phone_verified) {
+       await this.creditsService.grant(user.id, 5000, 'Phone Verification Bonus');
+    }
+    // Ensure email-only users still have some usable balance even if an older
+    // record was created with 0 credits.
+    if (!isPhone && user.email && user.credits <= 0) {
+      await this.creditsService.grant(user.id, this.STARTER_CREDITS, 'Email Verification Starter Credits');
+    }
 
     const updatedUser = await this.usersService.findById(user.id) as User;
     return this.login(updatedUser);
+  }
+
+  async resendOtp(userId: string) {
+    const user = await this.usersService.findById(userId);
+    if (!user) throw new BadRequestException('User not found');
+
+    const otp = this.otpService.generateOtp();
+    const expiresAt = this.otpService.getExpiry();
+    await this.usersService.update(user.id, { otp_code: otp, otp_expires_at: expiresAt });
+
+    if (user.phone_number) {
+      await this.otpService.sendOtp(user.phone_number, otp, 'phone');
+    } else if (user.email) {
+      await this.otpService.sendOtp(user.email, otp, 'email');
+    }
+
+    return { message: 'OTP resent successfully' };
   }
 
   async markTutorialSeen(userId: string) {
@@ -155,17 +196,29 @@ export class AuthService {
        throw new BadRequestException('Invalid or expired OTP');
     }
 
-    // Since they verified a mobile phone, they are granted 30 credits!
-    const newCredits = user.credits + 30;
     await this.usersService.update(user.id, {
        otp_code: null,
        otp_expires_at: null,
        phone_number,
        is_phone_verified: true,
-       credits: newCredits
     });
+    
+    await this.creditsService.grant(user.id, 5000, 'Phone Verification Bonus');
 
     const updatedUser = await this.usersService.findById(user.id) as User;
     return this.login(updatedUser); // Return a fresh token to reflect any new payload states if needed
+  }
+
+  async bootstrapAdmin(userId: string, passkey: string) {
+    const secretKey = process.env.SUPER_ADMIN_PASSKEY || 'admin_secret_123';
+    if (passkey !== secretKey) {
+      throw new UnauthorizedException('Invalid super admin passkey');
+    }
+
+    await this.usersService.update(userId, { is_admin: true });
+    const user = await this.usersService.findById(userId);
+    if (!user) throw new BadRequestException('User not found');
+    
+    return this.login(user);
   }
 }

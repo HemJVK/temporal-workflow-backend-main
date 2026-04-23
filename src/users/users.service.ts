@@ -35,4 +35,17 @@ export class UsersService {
   async findById(id: string): Promise<User | null> {
     return this.usersRepository.findOne({ where: { id } });
   }
+
+  async findAll(): Promise<User[]> {
+    return this.usersRepository.find();
+  }
+
+  async updateAdminStatus(id: string, is_admin: boolean): Promise<User> {
+    await this.usersRepository.update(id, { is_admin });
+    return this.findById(id) as Promise<User>;
+  }
+
+  async remove(id: string): Promise<void> {
+    await this.usersRepository.delete(id);
+  }
 }

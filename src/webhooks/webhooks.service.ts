@@ -62,6 +62,7 @@ export class WebhooksService {
       workflowId: definition.workflowId,
       startAt: graph.startAt,
       steps: graph.steps,
+      userId: context.body?.userId, // 👈 KEY FOR CREDIT SYSTEM
       initialState: {
         [graph.startAt]: {
           ...context,

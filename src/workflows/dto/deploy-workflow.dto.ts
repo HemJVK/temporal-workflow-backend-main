@@ -52,6 +52,10 @@ export class DeployWorkflowDto {
   @IsNotEmpty()
   startAt: string;
 
+  @IsString()
+  @IsOptional()
+  userId?: string;
+
   @IsObject()
   @ValidateNested({ each: true })
   @Type(() => WorkflowStepDto)

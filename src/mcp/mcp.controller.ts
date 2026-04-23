@@ -1,9 +1,13 @@
 import { Controller, Get, Post, Body, Param, Delete, Query } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { McpService } from './mcp.service';
 
 @Controller('mcp')
 export class McpController {
-    constructor(private readonly mcpService: McpService) { }
+    constructor(
+        private readonly mcpService: McpService,
+        private readonly configService: ConfigService,
+    ) { }
 
     // Local Installed Servers
     @Get('servers')
@@ -62,23 +66,34 @@ export class McpController {
     @Get('marketplace/glama')
     async getGlamaMcpServers(@Query('q') query?: string) {
         try {
-            const response = await fetch('https://api.glama.ai/api/v1/mcp/servers');
-            const data = await response.json();
-            let servers = Array.isArray(data) ? data : (data.data || data.servers || []);
+            const glamaKey = this.configService.get<string>('GLAMA_API_KEY');
+            const glamaUrl = query
+                ? `https://glama.ai/api/mcp/v1/servers?q=${encodeURIComponent(query)}`
+                : 'https://glama.ai/api/mcp/v1/servers';
 
-            if (query) {
-                const q = query.toLowerCase();
-                servers = servers.filter((s: any) =>
-                    s.name?.toLowerCase().includes(q) ||
-                    s.description?.toLowerCase().includes(q)
-                );
+            const response = await fetch(glamaUrl, {
+                headers: glamaKey ? { Authorization: `Bearer ${glamaKey}` } : {},
+            });
+
+            if (!response.ok) {
+                return { data: [] };
             }
+
+            const data = await response.json() as any;
+            const servers: any[] = Array.isArray(data)
+                ? data
+                : (data.servers || data.data || []);
+
             return {
                 data: servers.map((s: any) => ({
-                    id: s.id || s.name,
-                    name: s.name,
-                    package: s.npmPackage || s.name,
-                    description: s.description
+                    id: s.id || s.slug || s.name,
+                    name: s.name || s.id,
+                    package: s.npmPackage || s.package || s.name,
+                    description: s.description || '',
+                    config: {
+                        command: 'npx',
+                        args: ['-y', s.npmPackage || s.package || s.name],
+                    },
                 }))
             };
         } catch (e) {
