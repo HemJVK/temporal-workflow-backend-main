@@ -1,4 +1,13 @@
-import { Controller, Post, Body, UnauthorizedException, Get, UseGuards, Request, BadRequestException } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  UnauthorizedException,
+  Get,
+  UseGuards,
+  Request,
+  BadRequestException,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 import { AuthGuard } from './auth.guard';
@@ -7,7 +16,7 @@ import { AuthGuard } from './auth.guard';
 export class AuthController {
   constructor(
     private authService: AuthService,
-    private usersService: UsersService
+    private usersService: UsersService,
   ) {}
 
   @Post('login')
@@ -43,7 +52,7 @@ export class AuthController {
   @Post('google')
   async google(@Body() body: { token: string }) {
     if (!body.token) {
-       throw new UnauthorizedException('Google ID token is required');
+      throw new UnauthorizedException('Google ID token is required');
     }
     return this.authService.googleLogin(body.token);
   }
@@ -51,15 +60,19 @@ export class AuthController {
   @UseGuards(AuthGuard)
   @Post('add-phone')
   async requestPhoneAdd(@Request() req: any, @Body() body: { phone: string }) {
-     if (!body.phone) throw new UnauthorizedException('Phone number required');
-     return this.authService.requestPhoneAdd(req.user.sub, body.phone);
+    if (!body.phone) throw new UnauthorizedException('Phone number required');
+    return this.authService.requestPhoneAdd(req.user.sub, body.phone);
   }
 
   @UseGuards(AuthGuard)
   @Post('verify-add-phone')
-  async verifyPhoneAdd(@Request() req: any, @Body() body: { phone: string, code: string }) {
-     if (!body.phone || !body.code) throw new UnauthorizedException('Phone and code required');
-     return this.authService.verifyPhoneAdd(req.user.sub, body.phone, body.code);
+  async verifyPhoneAdd(
+    @Request() req: any,
+    @Body() body: { phone: string; code: string },
+  ) {
+    if (!body.phone || !body.code)
+      throw new UnauthorizedException('Phone and code required');
+    return this.authService.verifyPhoneAdd(req.user.sub, body.phone, body.code);
   }
 
   /** Resend OTP to phone/email after expiry */
@@ -89,6 +102,9 @@ export class AuthController {
   @Post('bootstrap-admin')
   async bootstrapAdmin(@Request() req: any, @Body() body: { passkey: string }) {
     if (!body.passkey) throw new BadRequestException('Passkey is required');
-    return this.authService.bootstrapAdmin(req.user.sub as string, body.passkey);
+    return this.authService.bootstrapAdmin(
+      req.user.sub as string,
+      body.passkey,
+    );
   }
 }

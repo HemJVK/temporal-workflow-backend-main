@@ -18,7 +18,9 @@ export class CreditsController {
   /** GET /credits/balance — get current user's balance */
   @Get('balance')
   async getBalance(@Request() req: any) {
-    const balance = await this.creditsService.getBalance(req.user.sub as string);
+    const balance = await this.creditsService.getBalance(
+      req.user.sub as string,
+    );
     return { balance };
   }
 

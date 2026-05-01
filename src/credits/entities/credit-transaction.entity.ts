@@ -13,7 +13,9 @@ export class CreditTransaction {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => User, (user) => user.credit_transactions, { onDelete: 'CASCADE' })
+  @ManyToOne(() => User, (user) => user.credit_transactions, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'user_id' })
   user: User;
 

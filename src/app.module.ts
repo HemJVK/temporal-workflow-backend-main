@@ -25,6 +25,8 @@ import { Agent } from './agents/entities/agent.entity';
 import { WorkflowHelperModule } from './workflow-helper/workflow-helper.module';
 import { CreditsModule } from './credits/credits.module';
 import { CreditTransaction } from './credits/entities/credit-transaction.entity';
+import { CustomBlocksModule } from './custom-blocks/custom-blocks.module';
+import { CustomBlock } from './custom-blocks/entities/custom-block.entity';
 
 @Module({
   imports: [
@@ -32,11 +34,11 @@ import { CreditTransaction } from './credits/entities/credit-transaction.entity'
       isGlobal: true,
       load: [configuration],
       envFilePath: '.env',
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+
       validationSchema: validationSchema,
     }),
     ThrottlerModule.forRoot([
-      { name: 'short', ttl: 1000, limit: 10 },   // 10 req/sec burst
+      { name: 'short', ttl: 1000, limit: 10 }, // 10 req/sec burst
       { name: 'medium', ttl: 60000, limit: 100 }, // 100 req/min
     ]),
     WorkflowsModule,
@@ -52,7 +54,15 @@ import { CreditTransaction } from './credits/entities/credit-transaction.entity'
         username: config.get<string>('DB_USERNAME') as string,
         password: config.get<string>('DB_PASSWORD') as string,
         database: config.get<string>('DB_NAME') as string,
-        entities: [WorkflowDefinition, WorkflowRun, McpServer, User, Agent, CreditTransaction],
+        entities: [
+          WorkflowDefinition,
+          WorkflowRun,
+          McpServer,
+          User,
+          Agent,
+          CreditTransaction,
+          CustomBlock,
+        ],
         synchronize: true,
       }),
     }),
@@ -65,11 +75,9 @@ import { CreditTransaction } from './credits/entities/credit-transaction.entity'
     AgentsModule,
     WorkflowHelperModule,
     CreditsModule,
+    CustomBlocksModule,
   ],
   controllers: [AppController],
-  providers: [
-    AppService,
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
-  ],
+  providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
-export class AppModule { }
+export class AppModule {}

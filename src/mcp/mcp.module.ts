@@ -6,9 +6,9 @@ import { McpController } from './mcp.controller';
 import { McpServer } from './entities/mcp-server.entity';
 
 @Module({
-    imports: [TypeOrmModule.forFeature([McpServer]), ConfigModule],
-    controllers: [McpController],
-    providers: [McpService],
-    exports: [McpService],
+  imports: [TypeOrmModule.forFeature([McpServer]), ConfigModule],
+  controllers: [McpController],
+  providers: [McpService],
+  exports: [McpService],
 })
-export class McpModule { }
+export class McpModule {}

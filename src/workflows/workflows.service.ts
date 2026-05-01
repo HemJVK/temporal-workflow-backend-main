@@ -25,16 +25,20 @@ export class WorkflowsService {
   /**
    * Creates a new Workflow Draft.
    */
-  async createWorkflow(dto: CreateWorkflowDto) {
+  async createWorkflow(dto: CreateWorkflowDto, userId: string) {
     // Using repo.create() is cleaner than new WorkflowDefinition()
     // It automatically maps DTO properties to Entity columns
     const workflow = this.workflowsRepository.create({
       name: dto.name,
+      userId,
       workflowId: `wf_${Date.now()}`,
       nodes: dto.nodes,
       edges: dto.edges,
       status: 'DRAFT', // Initial state
       isActive: false,
+      isPackage: dto.isPackage ?? false,
+      packageInputs: dto.packageInputs,
+      packageOutputs: dto.packageOutputs,
       deployedGraph: null, // No execution version yet
     });
 
@@ -45,8 +49,8 @@ export class WorkflowsService {
    * Updates the UI definition (Draft Mode).
    * Does NOT affect the live running version.
    */
-  async updateDraft(id: string, nodes: any[], edges: any[]) {
-    const workflow = await this.findOne(id);
+  async updateDraft(id: string, nodes: any[], edges: any[], userId: string) {
+    const workflow = await this.findOne(id, userId);
     if (!workflow) throw new NotFoundException('Workflow not found');
 
     await this.workflowsRepository.update(
@@ -60,16 +64,28 @@ export class WorkflowsService {
     return { success: true, id: workflow.id };
   }
 
-  async findAll() {
-    return this.workflowsRepository.find({ order: { updatedAt: 'DESC' } });
+  async findAll(userId: string) {
+    return this.workflowsRepository.find({
+      where: { userId },
+      order: { updatedAt: 'DESC' },
+    });
   }
 
-  async findOne(id: string) {
+  async findPackages() {
+    return this.workflowsRepository.find({
+      where: { isPackage: true },
+      order: { updatedAt: 'DESC' },
+    });
+  }
+
+  async findOne(id: string, userId: string) {
     // Look up by UUID first, fallback to Business ID (wf_...)
-    let workflow = await this.workflowsRepository.findOne({ where: { id } });
+    let workflow = await this.workflowsRepository.findOne({
+      where: { id, userId },
+    });
     if (!workflow) {
       workflow = await this.workflowsRepository.findOne({
-        where: { workflowId: id },
+        where: { workflowId: id, userId },
       });
     }
     return workflow;
@@ -85,13 +101,13 @@ export class WorkflowsService {
    * 2. Sets status to 'PUBLISHED' and isActive = true.
    * 3. Configures Temporal (Schedule) if needed.
    */
-  async deployWorkflow(dto: DeployWorkflowDto) {
+  async deployWorkflow(dto: DeployWorkflowDto, userId: string, userEmail?: string) {
     const { workflowId, steps, startAt } = dto;
     this.logger.log(`🚀 Deploying Workflow: ${workflowId}`);
 
     // 1. Fetch Entity
     const workflow = await this.workflowsRepository.findOne({
-      where: { workflowId: workflowId },
+      where: { workflowId: workflowId, userId },
     });
 
     if (!workflow) {
@@ -139,7 +155,7 @@ export class WorkflowsService {
           action: {
             type: 'startWorkflow',
             workflowType: 'InterpreterWorkflow',
-            args: [dto],
+            args: [{ ...dto, userId, userEmail }],
             taskQueue: 'agentic-workflow-queue',
             workflowId: `${workflowId}-cron`,
           },

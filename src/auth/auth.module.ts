@@ -15,7 +15,8 @@ import { CreditsModule } from '../credits/credits.module';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET') || 'fallback_secret_key_123',
+        secret:
+          configService.get<string>('JWT_SECRET') || 'fallback_secret_key_123',
         signOptions: { expiresIn: '7d' },
       }),
     }),

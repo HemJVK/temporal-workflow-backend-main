@@ -9,31 +9,46 @@ import {
   // 👇 Import specific exceptions
   NotFoundException,
   BadRequestException,
+  Request,
+  UseGuards,
 } from '@nestjs/common';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { WorkflowsService } from './workflows.service';
 import { DeployWorkflowDto } from './dto/deploy-workflow.dto';
 import { CreateWorkflowDto } from './dto/create-workflow.dto';
+import { AuthGuard } from '../auth/auth.guard';
 
+@UseGuards(AuthGuard)
 @Controller('workflows')
 export class WorkflowsController {
-  constructor(private readonly workflowsService: WorkflowsService) { }
+  constructor(private readonly workflowsService: WorkflowsService) {}
 
   /**
    * 1. CREATE
    */
   @Post()
-  async create(@Body() createWorkflowDto: CreateWorkflowDto) {
-    return this.workflowsService.createWorkflow(createWorkflowDto);
+  async create(
+    @Body() createWorkflowDto: CreateWorkflowDto,
+    @Request() req: any,
+  ) {
+    return this.workflowsService.createWorkflow(
+      createWorkflowDto,
+      req.user.sub,
+    );
   }
 
   /**
    * 2. LIST
    */
   @Get()
-  async findAll() {
-    return this.workflowsService.findAll();
+  async findAll(@Request() req: any) {
+    return this.workflowsService.findAll(req.user.sub);
+  }
+
+  @Get('packages')
+  async findPackages() {
+    return this.workflowsService.findPackages();
   }
 
   /**
@@ -43,7 +58,8 @@ export class WorkflowsController {
   @Get('local')
   async getLocalWorkflows() {
     try {
-      const workspaceDir = '/home/hem/personal/clg/sem 8/temporal/Temporal_Workspace';
+      const workspaceDir =
+        '/home/hem/personal/clg/sem 8/temporal/Temporal_Workspace';
 
       // Check if directory exists
       try {
@@ -53,7 +69,7 @@ export class WorkflowsController {
       }
 
       const files = await fs.readdir(workspaceDir);
-      const jsonFiles = files.filter(f => f.endsWith('.json'));
+      const jsonFiles = files.filter((f) => f.endsWith('.json'));
 
       const workflows = await Promise.all(
         jsonFiles.map(async (file) => {
@@ -69,17 +85,17 @@ export class WorkflowsController {
               updatedAt: stat.mtime.toISOString(), // Use file modification time
               nodes: parsed.nodes || [],
               edges: parsed.edges || [],
-              isLocal: true // Flag to identify local workflows
+              isLocal: true, // Flag to identify local workflows
             };
           } catch (e) {
             console.error(`Failed to parse local workflow file ${file}:`, e);
             return null;
           }
-        })
+        }),
       );
 
       // Filter out nulls from parse errors and return
-      return workflows.filter(w => w !== null);
+      return workflows.filter((w) => w !== null);
     } catch (e) {
       console.error('Failed to list local workflows:', e);
       throw new BadRequestException('Failed to list local workflows');
@@ -90,8 +106,8 @@ export class WorkflowsController {
    * 4. GET ONE
    */
   @Get(':id')
-  async findOne(@Param('id') id: string) {
-    const workflow = await this.workflowsService.findOne(id);
+  async findOne(@Param('id') id: string, @Request() req: any) {
+    const workflow = await this.workflowsService.findOne(id, req.user.sub);
     if (!workflow) {
       // ✅ Use semantic exception
       throw new NotFoundException(`Workflow ${id} not found`);
@@ -106,20 +122,31 @@ export class WorkflowsController {
   async updateDraft(
     @Param('id') id: string,
     @Body() body: { nodes: any[]; edges: any[] },
+    @Request() req: any,
   ) {
-    return await this.workflowsService.updateDraft(id, body.nodes, body.edges);
+    return await this.workflowsService.updateDraft(
+      id,
+      body.nodes,
+      body.edges,
+      req.user.sub,
+    );
   }
 
   /**
    * 6. DEPLOY
    */
   @Post('deploy')
-  async deploy(@Body() deployWorkflowDto: DeployWorkflowDto) {
+  async deploy(
+    @Body() deployWorkflowDto: DeployWorkflowDto,
+    @Request() req: any,
+  ) {
     try {
-      return await this.workflowsService.deployWorkflow(deployWorkflowDto);
+      return await this.workflowsService.deployWorkflow(
+        deployWorkflowDto,
+        req.user.sub,
+        req.user.email,  // Pass email for Composio entity routing
+      );
     } catch (e) {
-      // Service might throw "No Start Node found" (ValidationError).
-      // We catch generic Errors and rethrow as BadRequest so client gets 400, not 500.
       if (e instanceof NotFoundException) throw e;
       throw new BadRequestException('Validation Error');
     }
@@ -138,21 +165,24 @@ export class WorkflowsController {
     }
   }
 
-
-
   /**
    * 8. EXPORT LOCAL WORKSPACE
    */
   @Post('export-local')
-  async exportLocal(@Body() body: { name: string; nodes: any[]; edges: any[] }) {
+  async exportLocal(
+    @Body() body: { name: string; nodes: any[]; edges: any[] },
+  ) {
     try {
-      const workspaceDir = '/home/hem/personal/clg/sem 8/temporal/Temporal_Workspace';
+      const workspaceDir =
+        '/home/hem/personal/clg/sem 8/temporal/Temporal_Workspace';
 
       // Ensure directory exists
       await fs.mkdir(workspaceDir, { recursive: true });
 
       // Sanitize filename
-      const safeName = (body.name || 'Untitled_Workflow').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      const safeName = (body.name || 'Untitled_Workflow')
+        .replace(/[^a-z0-9]/gi, '_')
+        .toLowerCase();
       const fileName = `${safeName}_${Date.now()}.json`;
       const filePath = path.join(workspaceDir, fileName);
 

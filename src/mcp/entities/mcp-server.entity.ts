@@ -1,4 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 
 export enum McpTransportType {
   STDIO = 'stdio',
@@ -13,7 +19,11 @@ export class McpServer {
   @Column({ unique: true })
   name: string;
 
-  @Column({ type: 'enum', enum: McpTransportType, default: McpTransportType.STDIO })
+  @Column({
+    type: 'enum',
+    enum: McpTransportType,
+    default: McpTransportType.STDIO,
+  })
   transportType: McpTransportType;
 
   // For stdio: JSON holding { command: string, args: string[], env?: Record<string, string> }

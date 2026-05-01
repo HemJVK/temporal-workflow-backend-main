@@ -12,14 +12,19 @@ export class OtpService {
   constructor(private readonly configService: ConfigService) {
     const accountSid = this.configService.get<string>('TWILIO_ACCOUNT_SID');
     const apiKeySid = this.configService.get<string>('TWILIO_API_KEY_SID');
-    const apiKeySecret = this.configService.get<string>('TWILIO_API_KEY_SECRET');
-    this.twilioFrom = this.configService.get<string>('TWILIO_PHONE_NUMBER') || '';
+    const apiKeySecret = this.configService.get<string>(
+      'TWILIO_API_KEY_SECRET',
+    );
+    this.twilioFrom =
+      this.configService.get<string>('TWILIO_PHONE_NUMBER') || '';
 
     if (accountSid && apiKeySid && apiKeySecret) {
       this.twilioClient = twilio(apiKeySid, apiKeySecret, { accountSid });
       this.logger.log('Twilio client initialized (API Key auth)');
     } else {
-      this.logger.warn('Twilio credentials not configured — OTP will be logged only');
+      this.logger.warn(
+        'Twilio credentials not configured — OTP will be logged only',
+      );
     }
   }
 
@@ -36,7 +41,11 @@ export class OtpService {
     return expiresAt;
   }
 
-  async sendOtp(recipient: string, code: string, type: 'email' | 'phone'): Promise<void> {
+  async sendOtp(
+    recipient: string,
+    code: string,
+    type: 'email' | 'phone',
+  ): Promise<void> {
     const message = `Your Agent Flow verification code is: ${code}. Valid for 10 minutes.`;
 
     if (type === 'phone') {
@@ -49,7 +58,9 @@ export class OtpService {
           });
           this.logger.log(`SMS OTP sent to ${recipient}`);
         } catch (err: any) {
-          this.logger.error(`Failed to send SMS to ${recipient}: ${err.message}`);
+          this.logger.error(
+            `Failed to send SMS to ${recipient}: ${err.message}`,
+          );
           // Log fallback so dev can still test
           this.logger.warn(`[FALLBACK] OTP for ${recipient}: ${code}`);
         }
@@ -58,14 +69,20 @@ export class OtpService {
       }
     } else {
       // Email: log for now (integrate SendGrid / SES here later)
-      this.logger.log(`[MOCK EMAIL] To: ${recipient} | Subject: Your Verification Code | Body: ${message}`);
+      this.logger.log(
+        `[MOCK EMAIL] To: ${recipient} | Subject: Your Verification Code | Body: ${message}`,
+      );
     }
   }
 
   async sendSms(to: string, body: string): Promise<void> {
     if (this.twilioClient && this.twilioFrom) {
       try {
-        await this.twilioClient.messages.create({ body, from: this.twilioFrom, to });
+        await this.twilioClient.messages.create({
+          body,
+          from: this.twilioFrom,
+          to,
+        });
         this.logger.log(`SMS sent to ${to}`);
       } catch (err: any) {
         this.logger.error(`Failed to send SMS to ${to}: ${err.message}`);

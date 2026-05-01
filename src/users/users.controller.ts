@@ -1,4 +1,12 @@
-import { Controller, Get, Patch, Delete, Param, Body, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Patch,
+  Delete,
+  Param,
+  Body,
+  UseGuards,
+} from '@nestjs/common';
 import { UsersService } from './users.service';
 import { AdminGuard } from '../auth/admin.guard';
 
@@ -11,7 +19,7 @@ export class UsersController {
   async findAll() {
     const users = await this.usersService.findAll();
     // Mask passwords and specific PII if needed, but for admin we might want basic visibility
-    return users.map(u => ({
+    return users.map((u) => ({
       id: u.id,
       email: u.email,
       phone_number: u.phone_number,
@@ -26,7 +34,10 @@ export class UsersController {
 
   @UseGuards(AdminGuard)
   @Patch(':id/role')
-  async updateRole(@Param('id') id: string, @Body('is_admin') is_admin: boolean) {
+  async updateRole(
+    @Param('id') id: string,
+    @Body('is_admin') is_admin: boolean,
+  ) {
     return this.usersService.updateAdminStatus(id, is_admin);
   }
 

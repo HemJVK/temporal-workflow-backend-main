@@ -60,17 +60,22 @@ export class CreditsService {
 
     const newBalance = user.credits - cost;
     await this.userRepo.update(userId, { credits: newBalance });
-    
+
     await this.transactionRepo.save({
       user,
       amount: -cost,
       reason: operation,
     });
-    
-    this.logger.log(`User ${userId}: -${cost} credits (${operation}). Balance: ${newBalance}`);
+
+    this.logger.log(
+      `User ${userId}: -${cost} credits (${operation}). Balance: ${newBalance}`,
+    );
 
     // Send low-credit notification if threshold crossed
-    if (user.credits >= LOW_CREDIT_THRESHOLD && newBalance < LOW_CREDIT_THRESHOLD) {
+    if (
+      user.credits >= LOW_CREDIT_THRESHOLD &&
+      newBalance < LOW_CREDIT_THRESHOLD
+    ) {
       this.sendLowCreditAlert(user, newBalance).catch((err) =>
         this.logger.error('Low credit alert failed', err),
       );
@@ -96,14 +101,20 @@ export class CreditsService {
       reason: 'top-up',
     });
 
-    this.logger.log(`User ${userId}: +${amount} credits (top-up). Balance: ${newBalance}`);
+    this.logger.log(
+      `User ${userId}: +${amount} credits (top-up). Balance: ${newBalance}`,
+    );
     return newBalance;
   }
 
   /**
    * Admin: grant credits without payment (e.g. promotions, referrals).
    */
-  async grant(userId: string, amount: number, reason = 'admin grant'): Promise<number> {
+  async grant(
+    userId: string,
+    amount: number,
+    reason = 'admin grant',
+  ): Promise<number> {
     if (amount <= 0) throw new BadRequestException('Amount must be positive');
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
@@ -117,7 +128,9 @@ export class CreditsService {
       reason: reason,
     });
 
-    this.logger.log(`User ${userId}: +${amount} credits (${reason}). Balance: ${newBalance}`);
+    this.logger.log(
+      `User ${userId}: +${amount} credits (${reason}). Balance: ${newBalance}`,
+    );
     return newBalance;
   }
 

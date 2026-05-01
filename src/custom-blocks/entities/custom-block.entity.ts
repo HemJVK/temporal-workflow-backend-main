@@ -6,8 +6,8 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-@Entity('agents')
-export class Agent {
+@Entity('custom_blocks')
+export class CustomBlock {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -17,17 +17,19 @@ export class Agent {
   @Column({ length: 255 })
   name: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column('text')
   description: string;
 
-  @Column({ type: 'text', nullable: true })
-  systemPrompt: string;
+  // JSON schema for inputs (e.g. ["field1", "field2"])
+  @Column('jsonb', { default: [] })
+  inputs: string[];
 
-  @Column({ default: 'nvidia/nemotron-3-super-120b-a12b:free' })
-  modelName: string;
+  // The actual Javascript code to be executed
+  @Column('text', { default: '' })
+  customLogic: string;
 
-  @Column({ type: 'jsonb', default: () => "'[]'" })
-  tools: string[];
+  @Column({ default: false })
+  isPublic: boolean;
 
   @CreateDateColumn()
   createdAt: Date;

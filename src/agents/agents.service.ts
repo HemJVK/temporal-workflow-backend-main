@@ -52,9 +52,10 @@ export class AgentsService {
 
   // ── CRUD ────────────────────────────────────────────────────────────────────
 
-  async create(dto: CreateAgentDto): Promise<Agent> {
+  async create(dto: CreateAgentDto, userId: string): Promise<Agent> {
     const agent = this.agentRepo.create({
       name: dto.name,
+      userId,
       description: dto.description ?? '',
       systemPrompt: dto.systemPrompt ?? '',
       modelName: dto.modelName ?? 'nvidia/nemotron-3-super-120b-a12b:free',
@@ -63,24 +64,31 @@ export class AgentsService {
     return this.agentRepo.save(agent);
   }
 
-  findAll(): Promise<Agent[]> {
-    return this.agentRepo.find({ order: { createdAt: 'DESC' } });
+  findAll(userId: string): Promise<Agent[]> {
+    return this.agentRepo.find({
+      where: { userId },
+      order: { createdAt: 'DESC' },
+    });
   }
 
-  async findOne(id: string): Promise<Agent> {
-    const agent = await this.agentRepo.findOne({ where: { id } });
+  async findOne(id: string, userId: string): Promise<Agent> {
+    const agent = await this.agentRepo.findOne({ where: { id, userId } });
     if (!agent) throw new NotFoundException(`Agent ${id} not found`);
     return agent;
   }
 
-  async update(id: string, dto: UpdateAgentDto): Promise<Agent> {
-    await this.findOne(id); // throws if not found
+  async update(
+    id: string,
+    dto: UpdateAgentDto,
+    userId: string,
+  ): Promise<Agent> {
+    await this.findOne(id, userId); // throws if not found
     await this.agentRepo.update(id, dto);
-    return this.findOne(id);
+    return this.findOne(id, userId);
   }
 
-  async remove(id: string): Promise<{ success: boolean }> {
-    await this.findOne(id);
+  async remove(id: string, userId: string): Promise<{ success: boolean }> {
+    await this.findOne(id, userId);
     await this.agentRepo.delete(id);
     return { success: true };
   }
@@ -91,11 +99,18 @@ export class AgentsService {
     message: string,
     history: ChatMessage[] = [],
     userId?: string,
-  ): Promise<{ reply: string; agentConfig?: Record<string, unknown>; remainingCredits?: number }> {
+  ): Promise<{
+    reply: string;
+    agentConfig?: Record<string, unknown>;
+    remainingCredits?: number;
+  }> {
     // Deduct 1 credit per helper-chat message if user is authenticated
     let remainingCredits: number | undefined;
     if (userId) {
-      remainingCredits = await this.creditsService.deduct(userId, 'HELPER_CHAT');
+      remainingCredits = await this.creditsService.deduct(
+        userId,
+        'HELPER_CHAT',
+      );
     }
 
     const openRouterKey = this.configService.get<string>('OPENROUTER_API_KEY');
@@ -130,7 +145,7 @@ export class AgentsService {
       throw new Error(`OpenRouter error: ${response.status} — ${err}`);
     }
 
-    const data = (await response.json()) as any;
+    const data = await response.json();
     const reply = data.choices?.[0]?.message?.content ?? '';
 
     // Try to extract agent config JSON block from the reply

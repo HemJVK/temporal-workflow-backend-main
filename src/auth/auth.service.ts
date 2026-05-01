@@ -1,4 +1,10 @@
-import { Injectable, UnauthorizedException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  BadRequestException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -9,7 +15,9 @@ import { CreditsService } from '../credits/credits.service';
 
 @Injectable()
 export class AuthService {
-  private googleClient = new OAuth2Client('93727091909-pc7n4v5sefspk8j3qq38f4fsmo1ki2lk.apps.googleusercontent.com');
+  private googleClient = new OAuth2Client(
+    '93727091909-pc7n4v5sefspk8j3qq38f4fsmo1ki2lk.apps.googleusercontent.com',
+  );
   private readonly STARTER_CREDITS = 50;
 
   constructor(
@@ -32,9 +40,17 @@ export class AuthService {
   }
 
   private async checkAdminPromotion(user: User): Promise<User> {
-    const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase());
-    if (user.email && adminEmails.includes(user.email.toLowerCase()) && !user.is_admin) {
-      console.log(`Auto-promoting ${user.email} to Admin based on ADMIN_EMAILS config.`);
+    const adminEmails = (process.env.ADMIN_EMAILS || '')
+      .split(',')
+      .map((e) => e.trim().toLowerCase());
+    if (
+      user.email &&
+      adminEmails.includes(user.email.toLowerCase()) &&
+      !user.is_admin
+    ) {
+      console.log(
+        `Auto-promoting ${user.email} to Admin based on ADMIN_EMAILS config.`,
+      );
       await this.usersService.update(user.id, { is_admin: true });
       return (await this.usersService.findById(user.id)) || user;
     }
@@ -43,7 +59,11 @@ export class AuthService {
 
   async login(user: User) {
     const promotedUser = await this.checkAdminPromotion(user);
-    const payload = { email: promotedUser.email, sub: promotedUser.id, is_admin: promotedUser.is_admin };
+    const payload = {
+      email: promotedUser.email,
+      sub: promotedUser.id,
+      is_admin: promotedUser.is_admin,
+    };
     return {
       access_token: this.jwtService.sign(payload),
       user: {
@@ -52,19 +72,25 @@ export class AuthService {
         phone_number: promotedUser.phone_number,
         credits: promotedUser.credits,
         sso_id: promotedUser.sso_id,
-        is_admin: promotedUser.is_admin
-      }
+        is_admin: promotedUser.is_admin,
+      },
     };
   }
 
-  async register(data: { email?: string, password?: string, phone_number?: string, sso_id?: string }) {
+  async register(data: {
+    email?: string;
+    password?: string;
+    phone_number?: string;
+    sso_id?: string;
+  }) {
     if (data.email) {
       const existing = await this.usersService.findByEmail(data.email);
       if (existing) throw new BadRequestException('Email already in use');
     }
     if (data.phone_number) {
       const existing = await this.usersService.findByPhone(data.phone_number);
-      if (existing) throw new BadRequestException('Phone number already in use');
+      if (existing)
+        throw new BadRequestException('Phone number already in use');
     }
 
     const userData: Partial<User> = {
@@ -81,16 +107,19 @@ export class AuthService {
     // (We still grant an additional bonus for phone verification later.)
     userData.credits = this.STARTER_CREDITS;
     const newUser = await this.usersService.create(userData);
-    
+
     // Generate and "send" OTP
     const otp = this.otpService.generateOtp();
     const expiresAt = this.otpService.getExpiry();
-    await this.usersService.update(newUser.id, { otp_code: otp, otp_expires_at: expiresAt });
-    
+    await this.usersService.update(newUser.id, {
+      otp_code: otp,
+      otp_expires_at: expiresAt,
+    });
+
     if (data.phone_number) {
-       await this.otpService.sendOtp(data.phone_number, otp, 'phone');
+      await this.otpService.sendOtp(data.phone_number, otp, 'phone');
     } else if (data.email) {
-       await this.otpService.sendOtp(data.email, otp, 'email');
+      await this.otpService.sendOtp(data.email, otp, 'email');
     }
 
     return { message: 'OTP sent for verification', userId: newUser.id };
@@ -100,33 +129,41 @@ export class AuthService {
     const user = await this.usersService.findById(userId);
     if (!user) throw new BadRequestException('User not found');
     if (!user.otp_code || user.otp_code !== code) {
-       throw new BadRequestException('Invalid OTP');
+      throw new BadRequestException('Invalid OTP');
     }
     if (!user.otp_expires_at || user.otp_expires_at < new Date()) {
-       throw new BadRequestException('OTP expired');
+      throw new BadRequestException('OTP expired');
     }
 
     // Mark as verified
     const isPhone = !!user.phone_number;
 
     await this.usersService.update(user.id, {
-       otp_code: null,
-       otp_expires_at: null,
-       is_phone_verified: isPhone ? true : user.is_phone_verified,
-       is_email_verified: !isPhone && user.email ? true : user.is_email_verified,
+      otp_code: null,
+      otp_expires_at: null,
+      is_phone_verified: isPhone ? true : user.is_phone_verified,
+      is_email_verified: !isPhone && user.email ? true : user.is_email_verified,
     });
-    
+
     // Bonus credits for phone verification (anti-spam + higher trust)
     if (isPhone && !user.is_phone_verified) {
-       await this.creditsService.grant(user.id, 5000, 'Phone Verification Bonus');
+      await this.creditsService.grant(
+        user.id,
+        5000,
+        'Phone Verification Bonus',
+      );
     }
     // Ensure email-only users still have some usable balance even if an older
     // record was created with 0 credits.
     if (!isPhone && user.email && user.credits <= 0) {
-      await this.creditsService.grant(user.id, this.STARTER_CREDITS, 'Email Verification Starter Credits');
+      await this.creditsService.grant(
+        user.id,
+        this.STARTER_CREDITS,
+        'Email Verification Starter Credits',
+      );
     }
 
-    const updatedUser = await this.usersService.findById(user.id) as User;
+    const updatedUser = (await this.usersService.findById(user.id)) as User;
     return this.login(updatedUser);
   }
 
@@ -136,7 +173,10 @@ export class AuthService {
 
     const otp = this.otpService.generateOtp();
     const expiresAt = this.otpService.getExpiry();
-    await this.usersService.update(user.id, { otp_code: otp, otp_expires_at: expiresAt });
+    await this.usersService.update(user.id, {
+      otp_code: otp,
+      otp_expires_at: expiresAt,
+    });
 
     if (user.phone_number) {
       await this.otpService.sendOtp(user.phone_number, otp, 'phone');
@@ -165,7 +205,8 @@ export class AuthService {
     try {
       const ticket = await this.googleClient.verifyIdToken({
         idToken: token,
-        audience: '93727091909-pc7n4v5sefspk8j3qq38f4fsmo1ki2lk.apps.googleusercontent.com',
+        audience:
+          '93727091909-pc7n4v5sefspk8j3qq38f4fsmo1ki2lk.apps.googleusercontent.com',
       });
       const payload = ticket.getPayload();
       if (!payload || !payload.sub || !payload.email) {
@@ -180,32 +221,40 @@ export class AuthService {
   async requestPhoneAdd(userId: string, phone_number: string) {
     const user = await this.usersService.findById(userId);
     if (!user) throw new BadRequestException('User not found');
-    if (user.phone_number) throw new BadRequestException('Phone already exists');
+    if (user.phone_number)
+      throw new BadRequestException('Phone already exists');
 
     const otp = this.otpService.generateOtp();
     const expiresAt = this.otpService.getExpiry();
-    await this.usersService.update(user.id, { otp_code: otp, otp_expires_at: expiresAt });
+    await this.usersService.update(user.id, {
+      otp_code: otp,
+      otp_expires_at: expiresAt,
+    });
     await this.otpService.sendOtp(phone_number, otp, 'phone');
-    
+
     return { message: 'OTP sent to mobile device' };
   }
 
   async verifyPhoneAdd(userId: string, phone_number: string, code: string) {
     const user = await this.usersService.findById(userId);
-    if (!user || user.otp_code !== code || (user.otp_expires_at && user.otp_expires_at < new Date())) {
-       throw new BadRequestException('Invalid or expired OTP');
+    if (
+      !user ||
+      user.otp_code !== code ||
+      (user.otp_expires_at && user.otp_expires_at < new Date())
+    ) {
+      throw new BadRequestException('Invalid or expired OTP');
     }
 
     await this.usersService.update(user.id, {
-       otp_code: null,
-       otp_expires_at: null,
-       phone_number,
-       is_phone_verified: true,
+      otp_code: null,
+      otp_expires_at: null,
+      phone_number,
+      is_phone_verified: true,
     });
-    
+
     await this.creditsService.grant(user.id, 5000, 'Phone Verification Bonus');
 
-    const updatedUser = await this.usersService.findById(user.id) as User;
+    const updatedUser = (await this.usersService.findById(user.id)) as User;
     return this.login(updatedUser); // Return a fresh token to reflect any new payload states if needed
   }
 
@@ -218,7 +267,7 @@ export class AuthService {
     await this.usersService.update(userId, { is_admin: true });
     const user = await this.usersService.findById(userId);
     if (!user) throw new BadRequestException('User not found');
-    
+
     return this.login(user);
   }
 }

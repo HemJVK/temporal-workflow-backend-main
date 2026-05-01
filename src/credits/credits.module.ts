@@ -7,7 +7,10 @@ import { CreditTransaction } from './entities/credit-transaction.entity';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([User, CreditTransaction]), forwardRef(() => AuthModule)],
+  imports: [
+    TypeOrmModule.forFeature([User, CreditTransaction]),
+    forwardRef(() => AuthModule),
+  ],
   controllers: [CreditsController],
   providers: [CreditsService],
   exports: [CreditsService],

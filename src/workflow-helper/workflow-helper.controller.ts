@@ -25,9 +25,7 @@ Available node types and their uses:
 - logic_wait: Delay/wait — config: { duration: "5s" }
 - logic_loop: Loop over items — config: { items: "{{data}}" }
 - logic_parallel: Run steps in parallel
-- tool_gmail: Send Gmail — config: { to: "...", subject: "...", body: "..." }
-- send_sms_twilio: Send SMS via Twilio — config: { to: "{{phone}}", message: "..." }
-- send_email_sendgrid: Send email via SendGrid — config: { to: "...", subject: "...", body: "..." }
+- logic_custom_block: Custom JS Block — config: { blockName: "...", customLogic: "return { status: 'success' };" }
 - query_db_postgres: DB query — config: { query: "SELECT ...", params: [] }
 - ai_agent: AI agent node — config: { systemPrompt: "...", userPrompt: "{{input}}", agentId: "" }
 - tool_transform: Transform/map data — config: { expression: "{{data.items}}" }
@@ -75,10 +73,34 @@ CRITICAL RULES FOR WORKFLOW-JSON:
 3. For ai_agent nodes, provide an appropriate agentName and systemPrompt in the config data so the Agent Builder can construct it.
 
 Available node types: trigger_start, trigger_schedule, make_http_call, tool_generic_llm, 
-logic_condition, logic_wait, logic_loop, logic_parallel, tool_gmail, send_sms_twilio, 
-send_email_sendgrid, query_db_postgres, ai_agent, tool_transform, trigger_end
+logic_condition, logic_wait, logic_loop, logic_parallel, query_db_postgres, logic_custom_block, ai_agent, tool_transform, trigger_end
 
 Keep responses concise. Ask ONE question at a time.`;
+
+const BLOCK_HELPER_PROMPT = `You are an expert Javascript developer.
+The user wants to create a custom logic block for a visual workflow engine.
+A custom block needs:
+1. "name": A concise, clear name (e.g. "Extract Emails")
+2. "description": What it does
+3. "inputs": An array of strings representing the dynamic input fields the user will fill out (e.g. ["textToParse", "regex"])
+4. "customLogic": A string of javascript code that executes the logic.
+
+CRITICAL JAVASCRIPT RULES:
+- The JS code will be executed in a Node.js VM sandbox.
+- You have access to an 'input' variable which contains the evaluated values of the user's inputs. (e.g. input.textToParse)
+- You MUST return an object at the end of the script using 'return { ... };'
+- Do NOT use async/await at the top level without wrapping in an IIFE if needed, though simple synchronous code is preferred.
+- Example: 
+  const emails = input.text.match(/\\S+@\\S+\\.\\S+/g) || [];
+  return { status: "success", emails };
+
+Output STRICT JSON only:
+{
+  "name": "string",
+  "description": "string",
+  "inputs": ["string"],
+  "customLogic": "string"
+}`;
 
 // ── Controller ────────────────────────────────────────────────────────────────
 
@@ -98,10 +120,7 @@ export class WorkflowHelperController {
   // ── One-shot generation ────────────────────────────────────────────────────
 
   @Post('generate')
-  async generate(
-    @Body() body: { description: string },
-    @Request() req: any,
-  ) {
+  async generate(@Body() body: { description: string }, @Request() req: any) {
     if (!body.description?.trim()) {
       throw new BadRequestException('description is required');
     }
@@ -144,7 +163,7 @@ export class WorkflowHelperController {
       throw new Error(`OpenRouter error: ${response.status} — ${err}`);
     }
 
-    const data = (await response.json()) as any;
+    const data = await response.json();
     const raw: string = data.choices?.[0]?.message?.content ?? '{}';
 
     try {
@@ -168,7 +187,10 @@ export class WorkflowHelperController {
     const userId: string | undefined = req?.user?.sub;
     let remainingCredits: number | undefined;
     if (userId) {
-      remainingCredits = await this.creditsService.deduct(userId, 'HELPER_CHAT');
+      remainingCredits = await this.creditsService.deduct(
+        userId,
+        'HELPER_CHAT',
+      );
     }
 
     const openRouterKey = this.configService.get<string>('OPENROUTER_API_KEY');
@@ -203,7 +225,7 @@ export class WorkflowHelperController {
       throw new Error(`OpenRouter error: ${response.status} — ${err}`);
     }
 
-    const data = (await response.json()) as any;
+    const data = await response.json();
     const reply: string = data.choices?.[0]?.message?.content ?? '';
 
     // Try to extract embedded workflow JSON
@@ -218,5 +240,52 @@ export class WorkflowHelperController {
     }
 
     return { reply, workflowData, remainingCredits };
+  }
+
+  // ── Block Helper ────────────────────────────────────────────────────────────
+
+  @Post('generate-block')
+  async generateBlock(@Body() body: { prompt: string }, @Request() req: any) {
+    if (!body.prompt?.trim())
+      throw new BadRequestException('prompt is required');
+
+    const userId: string | undefined = req?.user?.sub;
+    if (userId) await this.creditsService.deduct(userId, 'HELPER_CHAT');
+
+    const openRouterKey = this.configService.get<string>('OPENROUTER_API_KEY');
+
+    const response = await fetch(
+      'https://openrouter.ai/api/v1/chat/completions',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${openRouterKey}`,
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.0-flash-lite-001',
+          messages: [
+            { role: 'system', content: BLOCK_HELPER_PROMPT },
+            { role: 'user', content: body.prompt },
+          ],
+          temperature: 0.2,
+          response_format: { type: 'json_object' },
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`OpenRouter error: ${response.status} — ${err}`);
+    }
+
+    const data = await response.json();
+    const raw: string = data.choices?.[0]?.message?.content ?? '{}';
+
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return { error: 'Failed to parse block JSON', raw };
+    }
   }
 }
