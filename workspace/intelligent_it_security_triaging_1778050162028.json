@@ -1,0 +1,309 @@
+{
+  "name": "Intelligent IT Security Triaging",
+  "nodes": [
+    {
+      "id": "start_node",
+      "type": "trigger_start",
+      "position": {
+        "x": 400,
+        "y": 100
+      },
+      "data": {
+        "label": "Start Trigger",
+        "type": "trigger_start",
+        "config": {
+          "triggerType": "Webhook",
+          "webhookMethod": "POST"
+        },
+        "status": "idle"
+      },
+      "measured": {
+        "width": 180,
+        "height": 63
+      },
+      "selected": false
+    },
+    {
+      "id": "trigger_start_1778050148452_vkykj",
+      "type": "trigger_start",
+      "position": {
+        "x": 400,
+        "y": 100
+      },
+      "data": {
+        "label": "Webhook Trigger - Incoming Ticket",
+        "type": "trigger_start",
+        "config": {},
+        "status": "idle"
+      },
+      "selected": true,
+      "measured": {
+        "width": 310,
+        "height": 63
+      }
+    },
+    {
+      "id": "tool_generic_llm_1778050148452_ih3wt",
+      "type": "tool_generic_llm",
+      "position": {
+        "x": 400,
+        "y": 250
+      },
+      "data": {
+        "label": "Analyze Ticket - SOC Analyst",
+        "type": "tool_generic_llm",
+        "config": {
+          "prompt": "You are a Level 1 SOC Analyst. Analyze the incoming helpdesk ticket to determine the 'severity' (Normal or Critical based on blast radius) and 'issue category' (e.g., Password Reset, Lost Device, System Outage). Output a structured JSON with 'severity' and 'issue category'."
+        },
+        "status": "idle"
+      },
+      "selected": true,
+      "measured": {
+        "width": 273,
+        "height": 105
+      }
+    },
+    {
+      "id": "logic_condition_1778050148452_hfhjs",
+      "type": "logic_condition",
+      "position": {
+        "x": 400,
+        "y": 400
+      },
+      "data": {
+        "label": "Route based on Severity and Category",
+        "type": "logic_condition",
+        "config": {
+          "conditions": [
+            {
+              "target": "queue_ticket",
+              "condition": "severity == 'Normal' and issue_category != 'Lost Device'"
+            },
+            {
+              "target": "security_alert",
+              "condition": "issue_category == 'Lost Device' or severity == 'Critical'"
+            },
+            {
+              "target": "emergency_alert",
+              "condition": "severity == 'Critical' and issue_category == 'System Outage'"
+            }
+          ]
+        },
+        "status": "idle"
+      },
+      "selected": true,
+      "measured": {
+        "width": 335,
+        "height": 105
+      }
+    },
+    {
+      "id": "query_db_postgres_1778050148452_o76tw",
+      "type": "query_db_postgres",
+      "position": {
+        "x": 400,
+        "y": 550
+      },
+      "data": {
+        "label": "Queue Ticket to Helpdesk",
+        "type": "query_db_postgres",
+        "config": {
+          "query": "INSERT INTO helpdesk_queue ... (ticket_data)"
+        },
+        "status": "idle"
+      },
+      "selected": true,
+      "measured": {
+        "width": 255,
+        "height": 105
+      }
+    },
+    {
+      "id": "tool_generic_llm_1778050148452_b9bzt",
+      "type": "tool_generic_llm",
+      "position": {
+        "x": 400,
+        "y": 700
+      },
+      "data": {
+        "label": "Send Confirmation Email",
+        "type": "tool_generic_llm",
+        "config": {
+          "prompt": "Generate an email to the user confirming the ticket has been queued. Include the ticket ID."
+        },
+        "status": "idle"
+      },
+      "selected": true,
+      "measured": {
+        "width": 250,
+        "height": 105
+      }
+    },
+    {
+      "id": "make_http_call_1778050148452_vk729",
+      "type": "make_http_call",
+      "position": {
+        "x": 400,
+        "y": 850
+      },
+      "data": {
+        "label": "Trigger MDM Wipe / Send Security Alert",
+        "type": "make_http_call",
+        "config": {
+          "url": "MDM_API_ENDPOINT",
+          "method": "POST",
+          "body": "wipe_device_command"
+        },
+        "status": "idle"
+      },
+      "selected": true,
+      "measured": {
+        "width": 280,
+        "height": 107
+      }
+    },
+    {
+      "id": "make_http_call_1778050148452_lhg2r",
+      "type": "make_http_call",
+      "position": {
+        "x": 400,
+        "y": 1000
+      },
+      "data": {
+        "label": "Send Urgent Alert (Slack/PagerDuty)",
+        "type": "make_http_call",
+        "config": {
+          "body": "Emergency Incident Alert",
+          "url": "PagerDuty_or_Slack_Webhook_URL",
+          "method": "POST"
+        },
+        "status": "idle"
+      },
+      "selected": true,
+      "measured": {
+        "width": 290,
+        "height": 107
+      }
+    },
+    {
+      "id": "trigger_end_1778050148452_q84z2",
+      "type": "trigger_end",
+      "position": {
+        "x": 400,
+        "y": 1150
+      },
+      "data": {
+        "label": "Workflow End",
+        "type": "trigger_end",
+        "config": {},
+        "status": "idle"
+      },
+      "selected": true,
+      "measured": {
+        "width": 200,
+        "height": 131
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_trigger_start_1778050148452_vkykj_tool_generic_llm_1778050148452_ih3wt",
+      "source": "trigger_start_1778050148452_vkykj",
+      "target": "tool_generic_llm_1778050148452_ih3wt",
+      "animated": true,
+      "style": {
+        "stroke": "#9333ea",
+        "strokeWidth": 2
+      },
+      "selected": true
+    },
+    {
+      "id": "e_tool_generic_llm_1778050148452_ih3wt_logic_condition_1778050148452_hfhjs",
+      "source": "tool_generic_llm_1778050148452_ih3wt",
+      "target": "logic_condition_1778050148452_hfhjs",
+      "animated": true,
+      "style": {
+        "stroke": "#9333ea",
+        "strokeWidth": 2
+      },
+      "selected": true
+    },
+    {
+      "id": "e_logic_condition_1778050148452_hfhjs_query_db_postgres_1778050148452_o76tw",
+      "source": "logic_condition_1778050148452_hfhjs",
+      "target": "query_db_postgres_1778050148452_o76tw",
+      "animated": true,
+      "style": {
+        "stroke": "#9333ea",
+        "strokeWidth": 2
+      },
+      "selected": true
+    },
+    {
+      "id": "e_query_db_postgres_1778050148452_o76tw_tool_generic_llm_1778050148452_b9bzt",
+      "source": "query_db_postgres_1778050148452_o76tw",
+      "target": "tool_generic_llm_1778050148452_b9bzt",
+      "animated": true,
+      "style": {
+        "stroke": "#9333ea",
+        "strokeWidth": 2
+      },
+      "selected": true
+    },
+    {
+      "id": "e_logic_condition_1778050148452_hfhjs_make_http_call_1778050148452_vk729",
+      "source": "logic_condition_1778050148452_hfhjs",
+      "target": "make_http_call_1778050148452_vk729",
+      "animated": true,
+      "style": {
+        "stroke": "#9333ea",
+        "strokeWidth": 2
+      },
+      "selected": true
+    },
+    {
+      "id": "e_logic_condition_1778050148452_hfhjs_make_http_call_1778050148452_lhg2r",
+      "source": "logic_condition_1778050148452_hfhjs",
+      "target": "make_http_call_1778050148452_lhg2r",
+      "animated": true,
+      "style": {
+        "stroke": "#9333ea",
+        "strokeWidth": 2
+      },
+      "selected": true
+    },
+    {
+      "id": "e_tool_generic_llm_1778050148452_b9bzt_trigger_end_1778050148452_q84z2",
+      "source": "tool_generic_llm_1778050148452_b9bzt",
+      "target": "trigger_end_1778050148452_q84z2",
+      "animated": true,
+      "style": {
+        "stroke": "#9333ea",
+        "strokeWidth": 2
+      },
+      "selected": true
+    },
+    {
+      "id": "e_make_http_call_1778050148452_vk729_trigger_end_1778050148452_q84z2",
+      "source": "make_http_call_1778050148452_vk729",
+      "target": "trigger_end_1778050148452_q84z2",
+      "animated": true,
+      "style": {
+        "stroke": "#9333ea",
+        "strokeWidth": 2
+      },
+      "selected": true
+    },
+    {
+      "id": "e_make_http_call_1778050148452_lhg2r_trigger_end_1778050148452_q84z2",
+      "source": "make_http_call_1778050148452_lhg2r",
+      "target": "trigger_end_1778050148452_q84z2",
+      "animated": true,
+      "style": {
+        "stroke": "#9333ea",
+        "strokeWidth": 2
+      },
+      "selected": true
+    }
+  ]
+}

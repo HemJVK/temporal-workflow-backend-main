@@ -11,12 +11,14 @@ import {
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 import { AuthGuard } from './auth.guard';
+import { ComposioService } from '../composio/composio.service';
 
 @Controller('auth')
 export class AuthController {
   constructor(
     private authService: AuthService,
     private usersService: UsersService,
+    private composioService: ComposioService,
   ) {}
 
   @Post('login')
@@ -55,6 +57,14 @@ export class AuthController {
       throw new UnauthorizedException('Google ID token is required');
     }
     return this.authService.googleLogin(body.token);
+  }
+
+  @Post('firebase')
+  async firebase(@Body() body: { token: string }) {
+    if (!body.token) {
+      throw new UnauthorizedException('Firebase ID token is required');
+    }
+    return this.authService.firebaseLogin(body.token);
   }
 
   @UseGuards(AuthGuard)
@@ -106,5 +116,57 @@ export class AuthController {
       req.user.sub as string,
       body.passkey,
     );
+  }
+
+  @Post('totp/setup')
+  async setupTotp(@Body() body: { email: string }) {
+    if (!body.email) throw new BadRequestException('Email is required');
+    return this.authService.setupTotp(body.email);
+  }
+
+  @Post('totp/verify-setup')
+  async verifyTotpSetup(@Body() body: { email: string; code: string }) {
+    if (!body.email || !body.code) throw new BadRequestException('Email and code are required');
+    return this.authService.verifyTotpSetup(body.email, body.code);
+  }
+
+  @Post('totp/login')
+  async totpLogin(@Body() body: { email: string; code: string }) {
+    if (!body.email || !body.code) throw new BadRequestException('Email and code are required');
+    return this.authService.totpLogin(body.email, body.code);
+  }
+
+  // ---------------------------------------------------------------
+  // COMPOSIO — Per-user Gmail Connection
+  // ---------------------------------------------------------------
+
+  /**
+   * Returns the Gmail OAuth URL that the user must visit once to connect
+   * their Gmail account to Composio. After authorization, their workflow
+   * email nodes will send from their own Gmail.
+   */
+  @UseGuards(AuthGuard)
+  @Get('composio/connect-url')
+  async composioConnectUrl(@Request() req: any) {
+    const user = await this.usersService.findById(req.user.sub as string);
+    if (!user?.email) throw new BadRequestException('User has no email address');
+    const url = await this.composioService.getGmailConnectionUrl(user.email);
+    if (!url) {
+      throw new BadRequestException('Could not generate Composio connection URL. Check COMPOSIO_API_KEY.');
+    }
+    return { url };
+  }
+
+  /**
+   * Returns whether the user has connected their Gmail account to Composio.
+   * The UI uses this to show a "Connect Gmail" prompt when a Gmail node is used.
+   */
+  @UseGuards(AuthGuard)
+  @Get('composio/status')
+  async composioStatus(@Request() req: any) {
+    const user = await this.usersService.findById(req.user.sub as string);
+    if (!user?.email) return { connected: false };
+    const connected = await this.composioService.isGmailConnected(user.email);
+    return { connected, entityId: user.email };
   }
 }

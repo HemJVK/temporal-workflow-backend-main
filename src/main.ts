@@ -1,21 +1,39 @@
 import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Enable CORS for React
+  // Global Prefix
+  app.setGlobalPrefix('api', { exclude: ['/'] });
+
+  // Input Validation
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
+
+  // Robust CORS
+  const origin = process.env.NODE_ENV === 'production' 
+    ? process.env.FRONTEND_URL 
+    : true; // Allow all in development for the mock portal
+    
   app.enableCors({
-    origin: 'http://localhost:5173', // Your React URL
+    origin,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    credentials: true,
   });
 
-  app.setGlobalPrefix('api', { exclude: ['/'] });
-  app.enableCors();
+  // Global Exception Filter
   app.useGlobalFilters(new AllExceptionsFilter());
 
-  await app.listen(3000);
-  console.log(`🌍 API Server ready at http://localhost:3000`);
+  const port = process.env.PORT || 3000;
+  await app.listen(port);
+  console.log(`🌍 API Server ready at http://localhost:${port}`);
 }
 bootstrap();

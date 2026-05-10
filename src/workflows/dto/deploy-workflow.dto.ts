@@ -3,42 +3,18 @@ import {
   IsNotEmpty,
   IsOptional,
   IsObject,
-  ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
 
-export class WorkflowStepParamsDto {
-  // We use a loose structure here because params change based on node type
-  // You can add specific fields if they are common, or leave it as a record
-  [key: string]: any;
-}
-
-export class WorkflowStepDto {
-  @IsString()
-  @IsNotEmpty()
-  id: string;
-
-  @IsString()
-  @IsNotEmpty()
-  name: string;
-
-  @IsString()
-  @IsNotEmpty()
-  type: string; // e.g. 'trigger_start', 'query_db_postgres'
-
-  @IsObject()
-  @IsOptional()
-  params: WorkflowStepParamsDto;
-
-  @IsString()
-  @IsOptional()
-  next?: string | null;
-
-  @IsObject()
-  @IsOptional()
-  branches?: Record<string, string>; // e.g. { "true": "step_2", "false": "step_3" }
-}
-
+/**
+ * DeployWorkflowDto — the payload sent from the UI when deploying a workflow.
+ *
+ * The `steps` field is a dynamic Record<nodeId, stepDefinition> whose keys are
+ * runtime node IDs (e.g. "start_node", "tool_generic_llm_17..."). NestJS's
+ * ValidationPipe with forbidNonWhitelisted:true cannot validate a Record<string, T>
+ * via @ValidateNested because it treats the dynamic keys as unknown DTO properties
+ * and rejects them. We therefore mark `steps` as @IsObject() only and validate
+ * its contents in the service layer.
+ */
 export class DeployWorkflowDto {
   @IsString()
   @IsNotEmpty()
@@ -56,10 +32,14 @@ export class DeployWorkflowDto {
   @IsOptional()
   userId?: string;
 
+  @IsString()
+  @IsOptional()
+  userEmail?: string;
+
+  /**
+   * Map of nodeId → step definition. Dynamic keys are allowed here.
+   * Validated at the service level (start node check, etc.).
+   */
   @IsObject()
-  @ValidateNested({ each: true })
-  @Type(() => WorkflowStepDto)
-  // Since keys are dynamic IDs (e.g. "tool_postgres_123"), we treat this as a Record
-  // Note: class-transformer handles Map/Record conversion best when strictly typed
-  steps: Record<string, WorkflowStepDto>;
+  steps: Record<string, any>;
 }

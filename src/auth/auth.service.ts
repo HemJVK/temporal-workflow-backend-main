@@ -10,8 +10,11 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { User } from '../users/entities/user.entity';
 import { OtpService } from './otp.service';
+import { FirebaseService } from './firebase.service';
 import { OAuth2Client } from 'google-auth-library';
 import { CreditsService } from '../credits/credits.service';
+import { TotpService } from './totp.service';
+import { ComposioService } from '../composio/composio.service';
 
 @Injectable()
 export class AuthService {
@@ -24,9 +27,53 @@ export class AuthService {
     private usersService: UsersService,
     private jwtService: JwtService,
     private otpService: OtpService,
+    private firebaseService: FirebaseService,
+    private totpService: TotpService,
+    private composioService: ComposioService,
     @Inject(forwardRef(() => CreditsService))
     private creditsService: CreditsService,
   ) {}
+
+  async firebaseLogin(token: string) {
+    try {
+      const decodedToken = await this.firebaseService.verifyIdToken(token);
+      const { uid, email, phone_number } = decodedToken;
+
+      let user = await this.usersService.findBySsoId(uid);
+
+      if (!user) {
+        // Try finding by email or phone if uid doesn't match
+        if (email) {
+          user = await this.usersService.findByEmail(email);
+        } else if (phone_number) {
+          user = await this.usersService.findByPhone(phone_number);
+        }
+
+        if (user) {
+          // Link uid to existing user
+          await this.usersService.update(user.id, { sso_id: uid });
+        } else {
+          // Create new user
+          user = await this.usersService.create({
+            sso_id: uid,
+            email: email,
+            phone_number: phone_number,
+            is_email_verified: !!email,
+            is_phone_verified: !!phone_number,
+            credits: this.STARTER_CREDITS,
+          });
+          // Register Composio entity so workflow email actions use their account
+          if (email) {
+            await this.composioService.registerEntity(email);
+          }
+        }
+      }
+
+      return this.login(user);
+    } catch (e) {
+      throw new UnauthorizedException('Invalid Firebase Token');
+    }
+  }
 
   async validateUser(email: string, pass: string): Promise<User | null> {
     const user = await this.usersService.findByEmail(email);
@@ -108,6 +155,11 @@ export class AuthService {
     userData.credits = this.STARTER_CREDITS;
     const newUser = await this.usersService.create(userData);
 
+    // Register a Composio entity for the user so their email workflows can
+    // send via their own connected Gmail account (lazy OAuth — they connect later).
+    if (data.email) {
+      await this.composioService.registerEntity(data.email);
+    }
     // Generate and "send" OTP
     const otp = this.otpService.generateOtp();
     const expiresAt = this.otpService.getExpiry();
@@ -267,6 +319,39 @@ export class AuthService {
     await this.usersService.update(userId, { is_admin: true });
     const user = await this.usersService.findById(userId);
     if (!user) throw new BadRequestException('User not found');
+
+    return this.login(user);
+  }
+
+  async setupTotp(email: string) {
+    const user = await this.usersService.findByEmail(email);
+    if (!user) throw new BadRequestException('User not found');
+
+    const { secret, qrCodeUrl } = await this.totpService.generateSecret(email);
+    await this.usersService.update(user.id, { totp_secret: secret });
+
+    return { qrCodeUrl };
+  }
+
+  async verifyTotpSetup(email: string, token: string) {
+    const user = await this.usersService.findByEmail(email);
+    if (!user || !user.totp_secret) throw new BadRequestException('TOTP not initiated for user');
+
+    const isValid = this.totpService.verifyToken(user.totp_secret, token);
+    if (!isValid) throw new UnauthorizedException('Invalid TOTP code');
+
+    await this.usersService.update(user.id, { is_totp_enabled: true });
+    return { success: true };
+  }
+
+  async totpLogin(email: string, token: string) {
+    const user = await this.usersService.findByEmail(email);
+    if (!user || !user.is_totp_enabled || !user.totp_secret) {
+      throw new UnauthorizedException('TOTP not enabled or invalid user');
+    }
+
+    const isValid = this.totpService.verifyToken(user.totp_secret, token);
+    if (!isValid) throw new UnauthorizedException('Invalid TOTP code');
 
     return this.login(user);
   }

@@ -46,6 +46,12 @@ export class User {
   @Column({ default: false })
   has_seen_tutorial: boolean;
 
+  @Column({ type: 'varchar', nullable: true })
+  totp_secret: string | null;
+
+  @Column({ default: false })
+  is_totp_enabled: boolean;
+
   @CreateDateColumn()
   created_at: Date;
 

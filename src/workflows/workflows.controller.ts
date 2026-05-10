@@ -59,7 +59,7 @@ export class WorkflowsController {
   async getLocalWorkflows() {
     try {
       const workspaceDir =
-        '/home/hem/personal/clg/sem 8/temporal/Temporal_Workspace';
+        process.env.LOCAL_WORKSPACE_DIR || '/app/workspace';
 
       // Check if directory exists
       try {
@@ -144,7 +144,6 @@ export class WorkflowsController {
       return await this.workflowsService.deployWorkflow(
         deployWorkflowDto,
         req.user.sub,
-        req.user.email,  // Pass email for Composio entity routing
       );
     } catch (e) {
       if (e instanceof NotFoundException) throw e;
@@ -174,7 +173,7 @@ export class WorkflowsController {
   ) {
     try {
       const workspaceDir =
-        '/home/hem/personal/clg/sem 8/temporal/Temporal_Workspace';
+        process.env.LOCAL_WORKSPACE_DIR || '/app/workspace';
 
       // Ensure directory exists
       await fs.mkdir(workspaceDir, { recursive: true });

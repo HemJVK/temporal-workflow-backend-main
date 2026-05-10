@@ -9,6 +9,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { CreditsService } from '../credits/credits.service';
 import { CreditsGuard } from '../credits/guards/credits.guard';
+import { WorkflowHelperService } from './workflow-helper.service';
 
 // ── System Prompts ────────────────────────────────────────────────────────────
 
@@ -115,12 +116,16 @@ export class WorkflowHelperController {
   constructor(
     private readonly configService: ConfigService,
     private readonly creditsService: CreditsService,
+    private readonly helperService: WorkflowHelperService,
   ) {}
 
   // ── One-shot generation ────────────────────────────────────────────────────
 
   @Post('generate')
-  async generate(@Body() body: { description: string }, @Request() req: any) {
+  async generate(
+    @Body() body: { description: string; model?: string },
+    @Request() req: any,
+  ) {
     if (!body.description?.trim()) {
       throw new BadRequestException('description is required');
     }
@@ -131,45 +136,13 @@ export class WorkflowHelperController {
       await this.creditsService.deduct(userId, 'HELPER_CHAT');
     }
 
-    const openRouterKey = this.configService.get<string>('OPENROUTER_API_KEY');
-
-    const response = await fetch(
-      'https://openrouter.ai/api/v1/chat/completions',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${openRouterKey}`,
-          'HTTP-Referer': 'http://localhost:5173',
-          'X-Title': 'Agent Flow Workflow Helper',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.0-flash-lite-001',
-          messages: [
-            { role: 'system', content: WORKFLOW_HELPER_PROMPT },
-            {
-              role: 'user',
-              content: `Generate a workflow for: ${body.description}`,
-            },
-          ],
-          temperature: 0.2,
-          response_format: { type: 'json_object' },
-        }),
-      },
-    );
-
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`OpenRouter error: ${response.status} — ${err}`);
-    }
-
-    const data = await response.json();
-    const raw: string = data.choices?.[0]?.message?.content ?? '{}';
-
     try {
-      return JSON.parse(raw);
-    } catch {
-      return { error: 'Failed to parse workflow JSON', raw };
+      return await this.helperService.processGeneration(
+        body.description,
+        body.model,
+      );
+    } catch (e) {
+      throw new BadRequestException(e.message || 'Failed to generate workflow');
     }
   }
 
@@ -177,7 +150,7 @@ export class WorkflowHelperController {
 
   @Post('chat')
   async chat(
-    @Body() body: { message: string; history?: ChatMsg[] },
+    @Body() body: { message: string; history?: ChatMsg[]; model?: string },
     @Request() req: any,
   ) {
     if (!body.message?.trim()) {
@@ -193,53 +166,16 @@ export class WorkflowHelperController {
       );
     }
 
-    const openRouterKey = this.configService.get<string>('OPENROUTER_API_KEY');
-    const history: ChatMsg[] = body.history ?? [];
-
-    const messages = [
-      { role: 'system', content: WORKFLOW_CHAT_PROMPT },
-      ...history,
-      { role: 'user', content: body.message },
-    ];
-
-    const response = await fetch(
-      'https://openrouter.ai/api/v1/chat/completions',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${openRouterKey}`,
-          'HTTP-Referer': 'http://localhost:5173',
-          'X-Title': 'Agent Flow Workflow Chat',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.0-flash-lite-001',
-          messages,
-          temperature: 0.5,
-        }),
-      },
-    );
-
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`OpenRouter error: ${response.status} — ${err}`);
+    try {
+      const result = await this.helperService.processChat(
+        body.message,
+        body.history ?? [],
+        body.model,
+      );
+      return { ...result, remainingCredits };
+    } catch (e) {
+      throw new BadRequestException(e.message || 'Chat failed');
     }
-
-    const data = await response.json();
-    const reply: string = data.choices?.[0]?.message?.content ?? '';
-
-    // Try to extract embedded workflow JSON
-    let workflowData: Record<string, unknown> | undefined;
-    const jsonMatch = reply.match(/```workflow-json\s*([\s\S]*?)```/);
-    if (jsonMatch) {
-      try {
-        workflowData = JSON.parse(jsonMatch[1]);
-      } catch {
-        // Not valid JSON
-      }
-    }
-
-    return { reply, workflowData, remainingCredits };
   }
 
   // ── Block Helper ────────────────────────────────────────────────────────────

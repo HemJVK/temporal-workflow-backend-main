@@ -101,7 +101,7 @@ export class WorkflowsService {
    * 2. Sets status to 'PUBLISHED' and isActive = true.
    * 3. Configures Temporal (Schedule) if needed.
    */
-  async deployWorkflow(dto: DeployWorkflowDto, userId: string, userEmail?: string) {
+  async deployWorkflow(dto: DeployWorkflowDto, userId: string) {
     const { workflowId, steps, startAt } = dto;
     this.logger.log(`🚀 Deploying Workflow: ${workflowId}`);
 
@@ -155,7 +155,7 @@ export class WorkflowsService {
           action: {
             type: 'startWorkflow',
             workflowType: 'InterpreterWorkflow',
-            args: [{ ...dto, userId, userEmail }],
+            args: [{ ...dto, userId }],
             taskQueue: 'agentic-workflow-queue',
             workflowId: `${workflowId}-cron`,
           },

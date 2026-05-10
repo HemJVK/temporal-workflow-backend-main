@@ -63,7 +63,9 @@ export class WebhooksService {
       startAt: graph.startAt,
       steps: graph.steps,
       userId: context.body?.userId, // 👈 KEY FOR CREDIT SYSTEM
+      userEmail: context.body?.userEmail, // 👈 KEY FOR COMPOSIO ENTITY
       initialState: {
+
         [graph.startAt]: {
           ...context,
           timestamp: new Date().toISOString(),
